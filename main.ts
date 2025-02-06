@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: WikiJSPublisherSettings = {
 
 export default class WikiJSPublisher extends Plugin {
     settings: WikiJSPublisherSettings;
+    debugMode: boolean = false; // 添加调试开关
 
     async onload() {
         await this.loadSettings();
@@ -69,6 +70,98 @@ export default class WikiJSPublisher extends Plugin {
         }
     }
 
+    async updatePage(id: number, title: string, content: string, tags: string[]) {
+        try {
+            const mutation = `
+                mutation UpdatePage($id: Int!, $title: String!, $content: String!, $tags: [String!]!, $locale: String!, $isPublished: Boolean!, $editor: String!, $isPrivate: Boolean!, $description: String) {
+                    pages {
+                        update(
+                            id: $id,
+                            title: $title,
+                            content: $content,
+                            locale: $locale,
+                            isPublished: $isPublished,
+                            editor: $editor,
+                            isPrivate: $isPrivate,
+                            tags: $tags,
+                            description: $description
+                        ) {
+                            responseResult {
+                                succeeded
+                                message
+                                errorCode
+                                slug
+                            }
+                        }
+                    }
+                }
+            `;
+
+            const variables = {
+                id: Number(id), // 确保 id 是整数
+                title,
+                content,
+                tags, // 直接传递数组
+                locale: "zh", // 添加 locale
+                isPublished: true, // 添加 isPublished
+                editor: "markdown", // 添加 editor
+                isPrivate: false, // 添加 isPrivate
+                description: "" // 添加 description，您可以根据需要设置
+            };
+
+            // 打印 mutation 和 variables
+            if (this.debugMode) {
+                console.log('GraphQL Update Mutation:', mutation);
+                console.log('GraphQL Update Variables:', JSON.stringify(variables, null, 2)); // 格式化输出
+            }
+
+            const result = await this.sendGraphQLRequest(mutation, variables);
+            
+            if (result.pages?.update?.responseResult?.succeeded) {
+                new Notice('成功更新页面！');
+                if (this.debugMode) {
+                    console.log('更新成功:', result.pages.update.responseResult);
+                }
+            } else {
+                const errorMsg = result.pages?.update?.responseResult?.message || '未知错误';
+                throw new Error(errorMsg);
+            }
+        } catch (error) {
+            console.error('更新错误:', error);
+            new Notice(`更新错误: ${error.message}`);
+        }
+    }
+
+    async getPageIdByTitle(title: string): Promise<number | null> {
+        try {
+            const query = `
+                query GetPageId($title: String!, $locale: String!) {
+                    pages {
+                        search(query: $title, locale: $locale) {
+                            results {
+                                id
+                            }
+                        }
+                    }
+                }
+            `;
+
+            const variables = {
+                title,
+                locale: "zh"
+            };
+
+            const result = await this.sendGraphQLRequest(query, variables);
+            const pageId = result.pages?.search?.results[0]?.id || null; // 获取第一个结果的 ID
+
+            return pageId;
+        } catch (error) {
+            console.error('获取页面 ID 错误:', error);
+            new Notice(`获取页面 ID 错误: ${error.message}`);
+            return null;
+        }
+    }
+
     async publishCurrentPage() {
         const view = this.app.workspace.getActiveViewOfType(MarkdownView);
         if (!view || !view.file) {
@@ -80,51 +173,72 @@ export default class WikiJSPublisher extends Plugin {
         const title = view.file.basename;
         const path = `/${view.file.path.replace(/\.md$/, '')}`;
 
+        // 获取文件的元数据（frontmatter）
+        const metadata = this.app.metadataCache.getFileCache(view.file)?.frontmatter;
+        const tags = metadata?.tags || metadata?.tag || [];
+        
+        // 去除标签前后的空格
+        const trimmedTags = Array.isArray(tags) ? tags.map(tag => tag.trim()) : [String(tags).trim()];
+
         try {
-            const mutation = `
-                mutation CreatePage($path: String!, $title: String!, $content: String!) {
-                    pages {
-                        create(
-                            path: $path,
-                            title: $title,
-                            content: $content,
-                            locale: "zh",
-                            description: "",
-                            isPublished: true,
-                            editor: "markdown",
-                            isPrivate: false,
-                            tags: ""
-                        ) {
-                            responseResult {
-                                succeeded
-                                errorCode
-                                slug
-                                message
-                            }
-                            page {
-                                id
-                                path
-                                title
+            // 根据标题获取页面 ID
+            const pageId = await this.getPageIdByTitle(title);
+
+            if (pageId) {
+                // 如果页面存在，则更新
+                await this.updatePage(pageId, title, content, trimmedTags);
+            } else {
+                // 如果页面不存在，则创建新页面
+                const mutation = `
+                    mutation CreatePage($path: String!, $title: String!, $content: String!, $tags: [String!]!) {
+                        pages {
+                            create(
+                                path: $path,
+                                title: $title,
+                                content: $content,
+                                locale: "zh",
+                                description: "",
+                                isPublished: true,
+                                editor: "markdown",
+                                isPrivate: false,
+                                tags: $tags
+                            ) {
+                                responseResult {
+                                    succeeded
+                                    errorCode
+                                    slug
+                                    message
+                                }
+                                page {
+                                    id
+                                    path
+                                    title
+                                }
                             }
                         }
                     }
+                `;
+
+                const variables = {
+                    path,
+                    title,
+                    content,
+                    tags: trimmedTags // 直接传递数组
+                };
+
+                // 打印 mutation 和 variables
+                console.log('GraphQL Mutation:', mutation);
+                console.log('GraphQL Variables:', variables);
+
+                const result = await this.sendGraphQLRequest(mutation, variables);
+                
+                if (result.pages?.create?.responseResult?.succeeded) {
+                    new Notice('成功发布到 Wiki.js！');
+                    console.log('发布成功:', result.pages.create.page);
+                } else {
+                    const errorMsg = result.pages?.create?.responseResult?.message || '未知错误';
+                    throw new Error(errorMsg);
                 }
-            `;
-
-            const variables = {
-                path,
-                title,
-                content
-            };
-
-            const result = await this.sendGraphQLRequest(mutation, variables);
-            
-            if (result.pages?.create?.responseResult?.succeeded) {
-                new Notice('成功发布到 Wiki.js！');
-                console.log('发布成功:', result.pages.create.page);
-            } else {
-                const errorMsg = result.pages?.create?.responseResult?.message || '未知错误';
-                throw new Error(errorMsg);
             }
         } catch (error) {
             console.error('发布错误:', error);
