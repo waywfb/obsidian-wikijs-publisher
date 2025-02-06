@@ -4,8 +4,7 @@
 	"version": "1.0.0",
 	"minAppVersion": "0.15.0",
 	"description": "Publish Obsidian notes to Wiki.js",
-	"author": "Your Name",
-	"authorUrl": "https://github.com/yourusername",
-	"fundingUrl": "https://obsidian.md/pricing",
+	"author": "waywfb",
+	"authorUrl": "https://github.com/waywfb",
 	"isDesktopOnly": false
 }
