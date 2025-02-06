@@ -4,6 +4,8 @@
 
 WikiJS-Publisher 是一个 Obsidian 插件，允许用户将当前的 Markdown 页面发布到 Wiki.js。该插件使用 GraphQL API 与 Wiki.js 进行交互。
 
+备注：本人不精通任何代码，此插件完全由AI开发，本人仅进行少量指导和修改。
+
 
 ## 功能
 
@@ -13,6 +15,7 @@ WikiJS-Publisher 是一个 Obsidian 插件，允许用户将当前的 Markdown �
 
 ## todo
 
+- 更新页面
 - 更新页面时，如果页面不存在，则创建页面。
 - 更新页面时，如果页面存在，则更新页面。
 
@@ -43,6 +46,3 @@ WikiJS-Publisher 是一个 Obsidian 插件，允许用户将当前的 Markdown �
 
 欢迎任何形式的贡献！请提交问题或拉取请求。
 
-## 备注
-
-本人不精通任何代码，此插件完全由AI开发，本人仅进行少量修改。
